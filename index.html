@@ -1045,11 +1045,12 @@ function handlePlanFile(file) {
         let score = 0;
         if (n.includes('final')) score += 10;
         if (n.includes('use this')) score += 9;
-        if (n.includes('resource plan')) score += 8;
+        if (n === 'resource plan') score += 8;      // exact match gets full score
+        else if (n.includes('resource plan')) score += 7;
         if (n.includes('resource')) score += 5;
         if (n.includes('estimat')) score += 4;
-        // Exclude obviously non-resource tabs
-        if (['welcome','setup','scope','all epics','foundation','release','rate card','picklist','copy'].some(x => n.includes(x))) score -= 20;
+        // Penalise non-resource tabs
+        if (['welcome','setup','scope','all epics','foundation','release','rate card','picklist','copy','prototype','z_'].some(x => n.includes(x))) score -= 20;
         return { name, score };
       }).filter(s => s.score > 0).sort((a,b) => b.score - a.score);
 
@@ -1162,7 +1163,13 @@ function parseResourcePlan(wb, sheetName) {
     const finalSkill = nfSkill || (row[3] ? String(row[3]).trim() : '');
 
     const matchedRole = matchRole(finalRole);
-    newRows.push({ role: matchedRole || finalRole, skill: finalSkill, nfi, hours });
+
+    // If role didn't match cleanly, try extracting an implied skill from the raw role name
+    // e.g. "AWS Developer" → role=Developer, skill=AWS
+    const impliedSkill = (!matchedRole || finalSkill === '') ? extractImpliedSkill(finalRole) : null;
+    const resolvedSkill = finalSkill || impliedSkill || '';
+
+    newRows.push({ role: matchedRole || finalRole, skill: resolvedSkill, nfi, hours });
   }
 
   if (newRows.length === 0) {
@@ -1189,6 +1196,16 @@ function matchRole(raw) {
   // Contains match
   const contains = known.find(k => r.includes(k.toLowerCase()) || k.toLowerCase().includes(r));
   if (contains) return contains;
+  return null;
+}
+
+// Extract implied skill from compound role names like "AWS Developer", "MuleSoft Developer"
+function extractImpliedSkill(raw) {
+  const r = raw.toLowerCase().trim();
+  const skillKeywords = ['aws', 'mulesoft', 'mule soft'];
+  for (const kw of skillKeywords) {
+    if (r.includes(kw)) return kw.charAt(0).toUpperCase() + kw.slice(1).replace(' soft', 'Soft');
+  }
   return null;
 }
 
